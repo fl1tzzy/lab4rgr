@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Медицинский кабинет</title>
+  <style>
+    body { font-family: Arial; padding: 20px; background: #f9f9f9; }
+    .hidden { display: none; }
+    .form-container { max-width:300px; margin:20px auto; padding:20px; background:#fff; box-shadow:0 0 10px rgba(0,0,0,0.1); }
+    input, select, button { width:100%; margin:8px 0; padding:8px; box-sizing:border-box; }
+    button { background:#4CAF50; color:#fff; border:none; cursor:pointer; }
+    button:hover { background:#45A049; }
+    #nav-buttons { text-align:center; }
+    #nav-buttons button { width:auto; margin:0 5px; }
+  </style>
+</head>
+<body>
+  <h1>Медицинский кабинет</h1>
+
+  <div id="auth-section">
+    <div id="nav-buttons">
+      <button id="show-login">Вход</button>
+      <button id="show-register">Регистрация</button>
+    </div>
+
+    <div id="login-form" class="form-container">
+      <h2>Вход</h2>
+      <input id="login-email" type="email" placeholder="Email">
+      <input id="login-password" type="password" placeholder="Пароль">
+      <button id="btn-login">Войти</button>
+    </div>
+
+    <div id="register-form" class="form-container hidden">
+      <h2>Регистрация</h2>
+      <input id="reg-email" type="email" placeholder="Email">
+      <input id="reg-password" type="password" placeholder="Пароль">
+      <button id="btn-register">Зарегистрироваться</button>
+    </div>
+  </div>
+
+  <div id="appointment-section" class="hidden">
+    <button id="open-form-btn">Записаться на приём</button>
+    <div id="appointment-form" class="form-container hidden">
+      <h2>Новая запись</h2>
+      <input id="symptoms" type="text" placeholder="Симптомы через запятую">
+      <button id="find-doctors-btn">Найти врачей</button>
+      <select id="doctor"><option value="">--выберите врача--</option></select>
+      <select id="appointment-time"><option value="">--выберите время--</option></select>
+      <button id="submit-appointment-btn">Подтвердить запись</button>
+    </div>
+  </div>
+
+  <script>
+    console.log("script loaded");
+
+    const loginForm = document.getElementById('login-form'),
+          regForm   = document.getElementById('register-form'),
+          authSec   = document.getElementById('auth-section'),
+          appSec    = document.getElementById('appointment-section');
+
+    document.getElementById('show-login').onclick = () => {
+      console.log("Switch to login form");
+      loginForm.classList.remove('hidden');
+      regForm.classList.add('hidden');
+    };
+    document.getElementById('show-register').onclick = () => {
+      console.log("Switch to register form");
+      regForm.classList.remove('hidden');
+      loginForm.classList.add('hidden');
+    };
+
+    document.getElementById('btn-register').onclick = async () => {
+      console.log("Register clicked");
+      const email    = document.getElementById('reg-email').value;
+      const password = document.getElementById('reg-password').value;
+      console.log("Register data:", { email, password });
+      try {
+        const res = await fetch('https://127.0.0.1:8000/register/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+        console.log("Register response status:", res.status);
+        const data = await res.json().catch(()=>null);
+        console.log("Register response body:", data);
+        alert(res.ok ? 'Регистрация успешна' : `Ошибка регистрации: ${res.status}`);
+      } catch (err) {
+        console.error("Register error:", err);
+        alert("Ошибка сети при регистрации");
+      }
+    };
+
+    document.getElementById('btn-login').onclick = async () => {
+      console.log("Login clicked");
+      const email    = document.getElementById('login-email').value;
+      const password = document.getElementById('login-password').value;
+      console.log("Login data:", { email, password });
+      try {
+        const res = await fetch('https://127.0.0.1:8000/login/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+        console.log("Login response status:", res.status);
+        const data = await res.json().catch(()=>null);
+        console.log("Login response body:", data);
+        if (!res.ok) {
+          alert(`Ошибка входа: ${res.status}`);
+          return;
+        }
+        localStorage.setItem('jwt_token', data.access_token);
+        console.log('JWT Token saved:', data.access_token);
+        authSec.classList.add('hidden');
+        appSec.classList.remove('hidden');
+      } catch (err) {
+        console.error("Login error:", err);
+        alert("Ошибка сети при входе");
+      }
+    };
+
+    document.getElementById('open-form-btn').onclick = () => {
+      console.log("Open appointment form");
+      document.getElementById('appointment-form').classList.remove('hidden');
+    };
+
+    document.getElementById('find-doctors-btn').onclick = async () => {
+      console.log("Find doctors clicked");
+      const symptoms = document.getElementById('symptoms').value.split(',').map(s=>s.trim());
+      console.log("Symptoms array:", symptoms);
+      try {
+        const res = await fetch('https://127.0.0.1:8000/doctors-by-symptoms/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + localStorage.getItem('jwt_token')
+          },
+          body: JSON.stringify({ symptoms })
+        });
+        console.log("Doctors response status:", res.status);
+        const docs = await res.json().catch(()=>null);
+        console.log("Doctors response body:", docs);
+        if (!res.ok) {
+          alert(`Ошибка получения врачей: ${res.status}`);
+          return;
+        }
+        const sel = document.getElementById('doctor');
+        sel.innerHTML = '<option value="">--выберите врача--</option>';
+        docs.forEach(d => {
+          const o = document.createElement('option');
+          o.value = d.id;
+          o.textContent = `${d.name} (${d.specialization})`;
+          o.dataset.schedule = d.schedule;
+          sel.appendChild(o);
+        });
+      } catch (err) {
+        console.error("Find doctors error:", err);
+        alert("Ошибка сети при запросе врачей");
+      }
+    };
+
+    document.getElementById('doctor').onchange = () => {
+      console.log("Doctor selected:", this.value);
+      const sched = document.getElementById('doctor').selectedOptions[0]?.dataset.schedule || '';
+      console.log("Schedule string:", sched);
+      const times = sched.split(',');
+      const timeSel = document.getElementById('appointment-time');
+      timeSel.innerHTML = '<option value="">--выберите время--</option>';
+      times.forEach(t => {
+        const o = document.createElement('option');
+        o.value = t; o.textContent = t;
+        timeSel.appendChild(o);
+      });
+    };
+
+    document.getElementById('submit-appointment-btn').onclick = async () => {
+      console.log("Submit appointment clicked");
+      const doctor_id       = +document.getElementById('doctor').value;
+      const appointment_time = document.getElementById('appointment-time').value;
+      const symptoms        = document.getElementById('symptoms').value;
+      console.log("Appointment data:", { doctor_id, appointment_time, symptoms });
+      try {
+        const res = await fetch('https://127.0.0.1:8000/appointments/', {
+          method: 'POST',
+          headers: {
+            'Content-Type':'application/json',
+            'Authorization':'Bearer ' + localStorage.getItem('jwt_token')
+          },
+          body: JSON.stringify({ doctor_id, user_id: 1, symptoms, appointment_time })
+        });
+        console.log("Appointment response status:", res.status);
+        const data = await res.json().catch(()=>null);
+        console.log("Appointment response body:", data);
+        alert(res.ok ? 'Запись создана' : `Ошибка создания записи: ${res.status}`);
+      } catch (err) {
+        console.error("Appointment error:", err);
+        alert("Ошибка сети при создании записи");
+      }
+    };
+  </script>
+</body>
+</html>
